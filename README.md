@@ -1,36 +1,101 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 盤聖 -BANSEI- 将棋大会プラットフォーム
 
-## Getting Started
+美しい将棋盤で対局し、トーナメント大会をスムーズに運営できるWebアプリです。
+小規模大会・将棋教室・友人同士の大会・オンライン企画での利用を想定しています。
 
-First, run the development server:
+## 主な機能
+
+- **大会運営**: 大会作成 → 参加者登録 → トーナメント表自動生成 → 勝敗入力 → 自動勝ち上がり → 優勝者表示
+- **将棋盤対局**: 本榧風の美しい盤面。合法手ハイライト・成り選択・持ち駒・駒打ち・王手/詰み判定・二歩や王手放置の禁止に対応
+- **対局時計**: 持ち時間+秒読み / 切れ負け / フィッシャー加算、一時停止・再開、時間切れ判定
+- **棋譜**: 一手ごとに自動保存、再生(一手送り/最初/最後)、KIF・CSA形式エクスポート
+- **マイページ**: プロフィール(駒アイコン)、戦歴(勝率・連勝・先手/後手別など)、棋譜ライブラリ(絞り込み・検索・お気に入り)、参加大会履歴、バッジ
+- **2種類のURL**: 閲覧用URL(共有用・編集不可)と管理キー付き管理用URL
+- **レスポンシブ**: スマホ・タブレット・PCに対応
+
+## 起動方法
 
 ```bash
+cd shogi-arena
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+ブラウザで http://localhost:3000 を開いてください。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 本番ビルド
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run build
+npm start
+```
 
-## Learn More
+### Vercelへのデプロイ
 
-To learn more about Next.js, take a look at the following resources:
+リポジトリをVercelにインポートするだけでデプロイできます(環境変数は不要)。
+Root Directoryに `shogi-arena` を指定してください。
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 使い方の流れ
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. トップページから「大会を作成する」
+2. 大会名・持ち時間などを入力して作成 → 管理画面に遷移(URLに管理キーが付与されます)
+3. 参加者を追加(名前だけでゲスト参加OK。シード・欠場も設定可能)
+4. 「トーナメント表を生成」で組み合わせ決定(不戦勝は自動処理)
+5. 対局カードをタップ → 「盤面で対局を開始」で実際に対局、または勝敗を直接入力
+6. 決勝まで進むと優勝者が表彰バナーに表示されます
+7. 「閲覧用URLをコピー」で観戦者に共有できます
 
-## Deploy on Vercel
+**戦歴の記録**: マイページのプロフィールと同じ表示名で大会に参加すると、対局結果が自動的に戦歴・レート・バッジに反映されます。
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 技術構成
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Next.js 16 (App Router) / React 19 / TypeScript
+- Tailwind CSS v4
+- データ保存: **localStorage**(MVP)
+
+### データ層について
+
+MVPではブラウザのlocalStorageに保存します(サーバー・ログイン不要で即利用可能)。
+データアクセスは `src/lib/store.ts` に集約されており、将来Supabase/Firebaseへ差し替える際は
+このモジュールの関数群を非同期実装に置き換えるだけで済む設計です。
+
+> **注意**: localStorageのため、大会データは作成した端末・ブラウザ内でのみ共有されます。
+> 別端末からの観戦・操作にはバックエンド(Supabase等)の導入が必要です。
+
+## ディレクトリ構成
+
+```
+src/
+├── app/                       # 画面(App Router)
+│   ├── page.tsx               # トップページ
+│   ├── tournaments/
+│   │   ├── page.tsx           # 大会一覧
+│   │   ├── new/               # 大会作成
+│   │   └── [id]/
+│   │       ├── page.tsx       # 大会閲覧(共有用)
+│   │       ├── admin/         # 大会管理(?key=管理キー)
+│   │       └── matches/[matchId]/
+│   │           ├── page.tsx   # 対局画面
+│   │           └── review/    # 棋譜再生
+│   └── mypage/                # マイページ(概要/戦歴/棋譜/大会/実績/設定)
+├── components/
+│   ├── shogi/                 # 将棋盤・駒台・対局時計・対局者パネル
+│   ├── BracketView.tsx        # トーナメント表
+│   └── ui.tsx                 # 共通UI(Button/Card/Modal等)
+└── lib/
+    ├── shogi/engine.ts        # 将棋ルールエンジン(UI非依存)
+    ├── shogi/export.ts        # KIF / CSA エクスポート
+    ├── tournament.ts          # トーナメント生成・勝ち上がりロジック
+    ├── store.ts               # データ層(localStorage、将来差し替え可能)
+    ├── stats.ts               # 戦歴集計
+    ├── records.ts             # 対局結果→戦歴・レート・バッジ連携
+    └── types.ts               # 全データ型定義
+```
+
+## 将来拡張を想定した設計
+
+- **大会形式**: `TournamentFormat`型に総当たり/スイス式/ダブルエリミネーションを定義済み(生成ロジックの追加のみで対応可能)
+- **アカウント**: 参加者は`userId`フィールドを持ち、後からアカウント紐づけ可能
+- **ルール**: 千日手・持将棋・連続王手の千日手などは`ResultType`に定義済み(判定ロジックの追加で対応)
+- **バッジ**: 条件判定関数(`evaluateBadges`)に条件を追加するだけで新バッジに対応
+- **リアルタイム観戦**: データ層が購読型(subscribe)のため、Supabase Realtimeへの移行が容易
