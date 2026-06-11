@@ -30,10 +30,11 @@ npm run build
 npm start
 ```
 
-### Vercelへのデプロイ
+### 公開ページ
 
-リポジトリをVercelにインポートするだけでデプロイできます(環境変数は不要)。
-Root Directoryに `shogi-arena` を指定してください。
+https://shogi-arena.vercel.app
+
+GitHubリポジトリとVercelが連携済みのため、`main` ブランチにプッシュすると自動的に再デプロイされます(環境変数は不要)。
 
 ## 使い方の流れ
 
