@@ -5,6 +5,7 @@ import {
   getGameRecordByMatch, getMatches, getParticipants, getTournament,
 } from "@/lib/store";
 import { useMounted, useStoreValue } from "@/lib/useStore";
+import { useViewerSync } from "@/lib/sync";
 import { BracketView } from "@/components/BracketView";
 import { ChampionBanner } from "@/components/ChampionBanner";
 import { Card, CardHeader, Chip, EmptyState, Loading, PieceAvatar } from "@/components/ui";
@@ -17,8 +18,10 @@ export default function TournamentViewPage() {
   const tournament = useStoreValue(() => getTournament(id), null);
   const participants = useStoreValue(() => getParticipants(id), []);
   const matches = useStoreValue(() => getMatches(id), []);
+  // 5秒ごとにサーバーから最新の大会状況を取得(別端末からの観戦に対応)
+  const syncReady = useViewerSync(id, 5000, mounted);
 
-  if (!mounted) return <Loading />;
+  if (!mounted || (!tournament && !syncReady)) return <Loading label="大会データを取得中…" />;
   if (!tournament) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-16 w-full">
@@ -26,7 +29,7 @@ export default function TournamentViewPage() {
           <EmptyState
             icon="香"
             title="大会が見つかりません"
-            description="URLが正しいかご確認ください。この端末で作成された大会のみ表示できます。"
+            description="URLが正しいかご確認ください。"
           />
         </Card>
       </div>

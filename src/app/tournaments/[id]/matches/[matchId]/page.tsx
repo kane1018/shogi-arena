@@ -9,6 +9,8 @@ import {
   saveGameRecord, saveMatch, saveMatches, saveTournament, getMatch,
 } from "@/lib/store";
 import { useMounted } from "@/lib/useStore";
+import { pullTournament, useAdminSync, useViewerSync } from "@/lib/sync";
+import { subscribe } from "@/lib/store";
 import { applyFinalResults, recomputeBracket } from "@/lib/tournament";
 import { recordGameForLocalUser, awardTournamentBadges } from "@/lib/records";
 import {
@@ -46,21 +48,30 @@ function MatchPageInner() {
 
   useEffect(() => {
     if (!mounted) return;
-    const tournament = getTournament(id);
-    const match = getMatch(matchId);
-    if (!tournament || !match || !match.senteParticipantId || !match.goteParticipantId) {
-      setLoaded("error");
-      return;
-    }
-    const sente = getParticipant(match.senteParticipantId);
-    const gote = getParticipant(match.goteParticipantId);
-    if (!sente || !gote) {
-      setLoaded("error");
-      return;
-    }
-    const game = getGameRecordByMatch(matchId);
-    setLoaded({ tournament, match, sente, gote, savedMoves: game?.moves ?? [] });
-  }, [mounted, id, matchId]);
+    let cancelled = false;
+    const load = () => {
+      if (cancelled) return;
+      const tournament = getTournament(id);
+      const match = getMatch(matchId);
+      if (!tournament || !match || !match.senteParticipantId || !match.goteParticipantId) {
+        setLoaded("error");
+        return;
+      }
+      const sente = getParticipant(match.senteParticipantId);
+      const gote = getParticipant(match.goteParticipantId);
+      if (!sente || !gote) {
+        setLoaded("error");
+        return;
+      }
+      const game = getGameRecordByMatch(matchId);
+      setLoaded({ tournament, match, sente, gote, savedMoves: game?.moves ?? [] });
+    };
+    // 別端末で開いた場合に備え、先にサーバーから取得してから読み込む
+    void pullTournament(id, key || undefined).finally(load);
+    return () => {
+      cancelled = true;
+    };
+  }, [mounted, id, matchId, key]);
 
   if (!mounted || loaded === null) return <Loading label="対局室を準備中…" />;
   if (loaded === "error") {
@@ -113,6 +124,24 @@ function GameScreen({
   const { clock, onMove: clockMove, start: clockStart, pause: clockPause, setActive } = useGameClock(tc, started && !finished);
   const interactive = isAdmin && started && !finished;
   const finalizedRef = useRef(finished);
+
+  // 管理者: 着手・終局のたびにサーバーへ自動送信
+  useAdminSync(tournament.id, adminKey, isAdmin);
+  // 観戦者: 3秒ごとにサーバーから取得し、盤面へ反映
+  useViewerSync(tournament.id, 3000, !isAdmin);
+  useEffect(() => {
+    if (isAdmin) return;
+    return subscribe(() => {
+      const g = getGameRecordByMatch(match.id);
+      const m = getMatch(match.id);
+      if (g && g.moves.length !== moves.length) {
+        setMoves(g.moves);
+        setState(replayTo(g.moves, g.moves.length));
+      }
+      if (m?.status === "playing") setStarted(true);
+      if (m?.status === "finished") setFinished(true);
+    });
+  }, [isAdmin, match.id, moves.length]);
 
   const lastMoveTo: [number, number] | null =
     moves.length > 0 ? fromFileRank(moves[moves.length - 1].to[0], moves[moves.length - 1].to[1]) : null;

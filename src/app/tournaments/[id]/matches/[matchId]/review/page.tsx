@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getGameRecordByMatch } from "@/lib/store";
 import { useMounted, useStoreValue } from "@/lib/useStore";
+import { useViewerSync } from "@/lib/sync";
 import { replayTo, fromFileRank } from "@/lib/shogi/engine";
 import { ShogiBoard, Komadai } from "@/components/shogi/ShogiBoard";
 import { toCSA, toKIF, downloadText } from "@/lib/shogi/export";
@@ -16,12 +17,14 @@ export default function ReviewPage() {
   const mounted = useMounted();
   const game = useStoreValue(() => getGameRecordByMatch(matchId), null);
   const [ply, setPly] = useState(-1); // -1 = 最終手まで表示
+  // 別端末から開いた場合に備えてサーバーから取得(再生中の追従は10秒間隔)
+  const syncReady = useViewerSync(id, 10000, mounted);
 
   const moves = game?.moves ?? [];
   const shownPly = ply === -1 ? moves.length : ply;
   const state = useMemo(() => replayTo(moves, shownPly), [moves, shownPly]);
 
-  if (!mounted) return <Loading label="棋譜を読み込み中…" />;
+  if (!mounted || (!game && !syncReady)) return <Loading label="棋譜を読み込み中…" />;
   if (!game || moves.length === 0) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-16 w-full">

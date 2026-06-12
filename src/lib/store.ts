@@ -168,6 +168,79 @@ export function saveGameRecord(g: GameRecord) {
   write("games", list);
 }
 
+// ===== サーバー同期用: 大会データ一括取得・一括反映 =====
+export interface TournamentBundle {
+  tournament: Tournament;
+  participants: Participant[];
+  matches: Match[];
+  games: GameRecord[];
+}
+
+export function collectTournamentBundle(tournamentId: string): TournamentBundle | null {
+  const tournament = getTournament(tournamentId);
+  if (!tournament) return null;
+  return {
+    tournament,
+    participants: getParticipants(tournamentId),
+    matches: getMatches(tournamentId),
+    games: getGameRecords().filter((g) => g.tournamentId === tournamentId),
+  };
+}
+
+/**
+ * サーバーから取得したバンドルをlocalStorageへ反映する。
+ * - 大会単位で置き換え(削除も反映される)
+ * - adminKeyが空で渡された場合(閲覧者向けレスポンス)はローカルの値を保持
+ * - 棋譜のお気に入りフラグは端末ローカルの値を保持
+ * - 変更がなければ書き込まない(ポーリング時の無駄な再レンダー防止)
+ */
+export function applyTournamentBundle(bundle: TournamentBundle): boolean {
+  const id = bundle.tournament.id;
+  let changed = false;
+
+  const localT = getTournament(id);
+  const incomingT: Tournament = {
+    ...bundle.tournament,
+    adminKey: bundle.tournament.adminKey || localT?.adminKey || "",
+  };
+  if (JSON.stringify(localT) !== JSON.stringify(incomingT)) {
+    const listT = getTournaments();
+    const i = listT.findIndex((t) => t.id === id);
+    if (i >= 0) listT[i] = incomingT;
+    else listT.push(incomingT);
+    write("tournaments", listT);
+    changed = true;
+  }
+
+  const allP = read<Participant[]>("participants", []);
+  const nextP = [...allP.filter((p) => p.tournamentId !== id), ...bundle.participants];
+  if (JSON.stringify(allP) !== JSON.stringify(nextP)) {
+    write("participants", nextP);
+    changed = true;
+  }
+
+  const allM = read<Match[]>("matches", []);
+  const nextM = [...allM.filter((m) => m.tournamentId !== id), ...bundle.matches];
+  if (JSON.stringify(allM) !== JSON.stringify(nextM)) {
+    write("matches", nextM);
+    changed = true;
+  }
+
+  const allG = getGameRecords();
+  const favorites = new Map(allG.map((g) => [g.matchId, g.favorite]));
+  const incomingG = bundle.games.map((g) => ({
+    ...g,
+    favorite: favorites.get(g.matchId) ?? g.favorite,
+  }));
+  const nextG = [...allG.filter((g) => g.tournamentId !== id), ...incomingG];
+  if (JSON.stringify(allG) !== JSON.stringify(nextG)) {
+    write("games", nextG);
+    changed = true;
+  }
+
+  return changed;
+}
+
 // ===== 戦歴 =====
 export function getPersonalRecords(userId: string): PersonalRecord[] {
   return read<PersonalRecord[]>("records", []).filter((r) => r.userId === userId);

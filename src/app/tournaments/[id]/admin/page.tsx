@@ -10,6 +10,7 @@ import {
   saveParticipant, saveTournament,
 } from "@/lib/store";
 import { useMounted, useStoreValue } from "@/lib/useStore";
+import { useAdminSync } from "@/lib/sync";
 import {
   applyFinalResults, generateBracket, recomputeBracket,
 } from "@/lib/tournament";
@@ -36,8 +37,10 @@ function AdminPageInner() {
   const tournament = useStoreValue(() => getTournament(id), null);
   const participants = useStoreValue(() => getParticipants(id), []);
   const matches = useStoreValue(() => getMatches(id), []);
+  // サーバー同期: 初回復元(別端末対応) + ローカル変更の自動送信
+  const syncReady = useAdminSync(id, key, mounted);
 
-  if (!mounted) return <Loading />;
+  if (!mounted || (!tournament && !syncReady)) return <Loading label="大会データを確認中…" />;
   if (!tournament) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-16 w-full">
